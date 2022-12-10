@@ -3,7 +3,7 @@ export declare function eventlakeClient(opts: EventlakeOptions): EventlakeClient
 export type EventlakeClient = {
   /**
    * Sends a third-party event (event intercepted from third-party system, such as analytics.js or GA). Should
-   * not be called directlyy
+   * not be called directly
    * @param typeName event name of event
    * @param _3pData third-party payload. The structure depend on
    * @param type event-type
@@ -34,7 +34,7 @@ export type EventlakeClient = {
    */
   identify: (userData: UserProps, doNotSendEvent?: boolean) => Promise<void>
   /**
-   * Initializes tracker. Must be called
+   * Initializes eventlake tracker. Must be called
    * @param initialization options
    */
   init: (opts: EventlakeOptions) => void

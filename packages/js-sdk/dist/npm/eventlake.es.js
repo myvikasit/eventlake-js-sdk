@@ -429,21 +429,6 @@ var LocalStorageQueue = /** @class */ (function () {
     return LocalStorageQueue;
 }());
 
-//import { parse } from "node-html-parser";
-var VERSION_INFO = {
-    env: "production",
-    date: "2022-12-08T01:42:38.732Z",
-    version: "2.1.1",
-};
-var EVENTLAKE_VERSION = "".concat(VERSION_INFO.version, "/").concat(VERSION_INFO.env, "@").concat(VERSION_INFO.date);
-var EVENTLAKE_API_HOST = "api.eventlake.io";
-var MAX_AGE_TEN_YEARS = 31622400 * 10;
-var beaconTransport = function (url, json) {
-    getLogger().debug("Sending beacon", json);
-    var blob = new Blob([json], { type: "text/plain" });
-    navigator.sendBeacon(url, blob);
-    return Promise.resolve();
-};
 function tryFormat(string) {
     if (typeof string === "string") {
         try {
@@ -454,10 +439,26 @@ function tryFormat(string) {
         }
     }
 }
-var echoTransport = function (url, json) {
-    console.log("EventLake client tried to send payload to ".concat(url), tryFormat(json));
+var beaconTransport = function (url, json) {
+    getLogger().debug("Using beacon transport", json);
+    var blob = new Blob([json], { type: "text/plain" });
+    navigator.sendBeacon(url, blob);
     return Promise.resolve();
 };
+var consoleTransport = function (url, json) {
+    console.log("EventLake client sending payload to console only to ".concat(url), tryFormat(json));
+    return Promise.resolve();
+};
+
+//import { parse } from "node-html-parser";
+var VERSION_INFO = {
+    env: "production",
+    date: "2022-12-10T02:33:48.018Z",
+    version: "1.5.0",
+};
+var EVENTLAKE_VERSION = "".concat(VERSION_INFO.version, "/").concat(VERSION_INFO.env, "@").concat(VERSION_INFO.date);
+var EVENTLAKE_API_HOST = "api.eventlake.io";
+var MAX_AGE_TEN_YEARS = 31622400 * 10;
 // This is a hack to expire all cookies with non-root path left behind by invalid tracking.
 // TODO remove soon
 function expireNonRootCookies(name, path) {
@@ -488,13 +489,13 @@ var CookiePersistence = /** @class */ (function () {
             try {
                 var parsed = JSON.parse(decodeURIComponent(str));
                 if (typeof parsed !== "object") {
-                    getLogger().warn("Can't restore value of ".concat(this.cookieName, "@").concat(this.cookieDomain, ", expected to be object, but found ").concat(typeof parsed !== "object", ": ").concat(parsed, ". Ignoring"));
+                    getLogger().warn("Not able to retrieve value of ".concat(this.cookieName, "@").concat(this.cookieDomain, ", object is expected, but found ").concat(typeof parsed !== "object", ": ").concat(parsed, "."));
                     return undefined;
                 }
                 return parsed;
             }
             catch (e) {
-                getLogger().error("Failed to decode JSON from " + str, e);
+                getLogger().error("JSON decoding failed: " + str, e);
                 return undefined;
             }
         }
@@ -542,11 +543,11 @@ var browserEnv = {
         expireNonRootCookies(name);
         var idCookie = getCookie(name);
         if (idCookie) {
-            getLogger().debug("Existing user id", idCookie);
+            getLogger().debug("Existing userId", idCookie);
             return idCookie;
         }
         var newId = generateId();
-        getLogger().debug("New user id", newId);
+        getLogger().debug("New userId", newId);
         setCookie(name, newId, {
             domain: domain,
             secure: document.location.protocol !== "http:",
@@ -727,15 +728,15 @@ var xmlHttpTransport = function (url, jsonPayload, additionalHeaders, handler) {
     var req = new window.XMLHttpRequest();
     return new Promise(function (resolve, reject) {
         req.onerror = function (e) {
-            getLogger().error("Failed to send", jsonPayload, e);
+            getLogger().error("Payload sending failed", jsonPayload, e);
             handler(-1, {});
-            reject(new Error("Failed to send JSON. See console logs"));
+            reject(new Error("JSON sending failed"));
         };
         req.onload = function () {
             if (req.status !== 200) {
                 handler(req.status, {});
-                getLogger().warn("Failed to send data to ".concat(url, " (#").concat(req.status, " - ").concat(req.statusText, ")"), jsonPayload);
-                reject(new Error("Failed to send JSON. Error code: ".concat(req.status, ". See logs for details")));
+                getLogger().warn("Data sending failed to ".concat(url, " (#").concat(req.status, " - ").concat(req.statusText, ")"), jsonPayload);
+                reject(new Error("JSON sending failed. Response status code: ".concat(req.status, ".")));
             }
             else {
                 handler(req.status, req.responseText);
@@ -749,7 +750,7 @@ var xmlHttpTransport = function (url, jsonPayload, additionalHeaders, handler) {
             return req.setRequestHeader(key, val);
         });
         req.send(jsonPayload);
-        getLogger().debug("sending json", jsonPayload);
+        getLogger().debug("Payload sent to server", jsonPayload);
     });
 };
 var fetchTransport = function (fetch) {
@@ -772,7 +773,7 @@ var fetchTransport = function (fetch) {
                         return [3 /*break*/, 3];
                     case 2:
                         e_1 = _c.sent();
-                        getLogger().error("Failed to send", jsonPayload, e_1);
+                        getLogger().error("Payload sending failed", jsonPayload, e_1);
                         handler(-1, {});
                         return [2 /*return*/];
                     case 3:
@@ -794,14 +795,14 @@ var fetchTransport = function (fetch) {
                         return [3 /*break*/, 7];
                     case 6:
                         e_2 = _c.sent();
-                        getLogger().error("Failed to parse ".concat(url, " response. Content-type: ").concat(contentType, " text: ").concat(text), e_2);
+                        getLogger().error("Response parsing failed for ".concat(url, ". Content-type: ").concat(contentType, " text: ").concat(text), e_2);
                         return [3 /*break*/, 7];
                     case 7:
                         try {
                             handler(res.status, resJson);
                         }
                         catch (e) {
-                            getLogger().error("Failed to handle ".concat(url, " response. Content-type: ").concat(contentType, " text: ").concat(text), e);
+                            getLogger().error("".concat(url, " response handling failed. Content-type: ").concat(contentType, " text: ").concat(text), e);
                         }
                         return [2 /*return*/];
                 }
@@ -809,6 +810,15 @@ var fetchTransport = function (fetch) {
         });
     };
 };
+/**
+ * Abstraction on top of HTTP calls. Implementation can be either based on XMLHttpRequest, Beacon API or
+ * fetch (if running in Node env)
+ *
+ * Implementation should reject promise if request is unsuccessful. Parameters are:
+ *    - url - URL
+ *    - jsonPayload - POST payload. If not string, result should be converted to string with JSON.parse()
+ *    - an optional handler that will be called in any case (both for failed and succesfull requests)
+ */
 function interceptSegmentCalls(t) {
     var win = window;
     if (!win.analytics) {
@@ -843,12 +853,12 @@ var EventlakeClientImpl = /** @class */ (function () {
     }
     EventlakeClientImpl.prototype.identify = function (props, doNotSendEvent) {
         this.userProperties = __assign(__assign({}, this.userProperties), props);
-        getLogger().debug("EventLake user identified", props);
+        getLogger().debug("identify() executed for user", props);
         if (this.userIdPersistence) {
             this.userIdPersistence.save(props);
         }
         else {
-            getLogger().warn("Identify() is called before initialization");
+            getLogger().warn("identify() method is called before Eventlake initialization");
         }
         if (!doNotSendEvent) {
             return this.track("user_identify", {});
@@ -928,7 +938,7 @@ var EventlakeClientImpl = /** @class */ (function () {
             var factor = Math.pow(2, this.attempt++);
             timeout = Math.min(this.retryTimeout[0] * random * factor, this.retryTimeout[1]);
         }
-        getLogger().debug("Scheduling event queue flush in ".concat(timeout, " ms."));
+        getLogger().debug("Event queue will be flushed in ".concat(timeout, " ms."));
         setTimeout(function () { return _this.flush(); }, timeout);
     };
     EventlakeClientImpl.prototype.flush = function () {
@@ -955,13 +965,13 @@ var EventlakeClientImpl = /** @class */ (function () {
                     case 2:
                         _b.sent();
                         this.attempt = 1;
-                        getLogger().debug("Successfully flushed ".concat(queue.length, " events from queue"));
+                        getLogger().debug("".concat(queue.length, " events has been flushed from queue"));
                         return [3 /*break*/, 4];
                     case 3:
                         _b.sent();
                         queue = queue.map(function (el) { return [el[0], el[1] + 1]; }).filter(function (el) {
                             if (el[1] >= _this.maxSendAttempts) {
-                                getLogger().error("Dropping queued event after ".concat(el[1], " attempts since max send attempts ").concat(_this.maxSendAttempts, " reached. See logs for details"));
+                                getLogger().error("Max attemp (".concat(_this.maxSendAttempts, ") done. Queued events will be dropped after ").concat(el[1], " attempt."));
                                 return false;
                             }
                             return true;
@@ -1002,7 +1012,7 @@ var EventlakeClientImpl = /** @class */ (function () {
                 if (extras && extras.length > 0) {
                     var isWindow = isBrowser();
                     if (!isWindow) {
-                        getLogger().error("Tags destination supported only in browser environment");
+                        getLogger().error("Tags are supported only in browsers.");
                     }
                     else {
                         for (var _i = 0, extras_1 = extras; _i < extras_1.length; _i++) {
@@ -1047,7 +1057,7 @@ var EventlakeClientImpl = /** @class */ (function () {
     };
     EventlakeClientImpl.prototype.track = function (type, payload) {
         var data = payload || {};
-        getLogger().debug("track event of type", type, data);
+        getLogger().debug("track() executed for event type", type, data);
         var e = this.makeEvent(type, "eventlake", payload || {});
         return this.sendJson(e);
     };
@@ -1056,7 +1066,7 @@ var EventlakeClientImpl = /** @class */ (function () {
         var _a, _b, _c, _d;
         if (isBrowser() && !options.force_use_fetch) {
             if (options.fetch) {
-                getLogger().warn("Custom fetch implementation is provided to EventLake. However, it will be ignored since EventLake runs in browser");
+                getLogger().warn("Custom fetch is passed. Eventlake in browser will ignore this");
             }
             this.transport = this.beaconApi ? beaconTransport : xmlHttpTransport;
         }
@@ -1076,7 +1086,7 @@ var EventlakeClientImpl = /** @class */ (function () {
         }
         if (options.console_transport === true) {
             getLogger().warn('eventlakeClient is configured with "echo" transport. Outgoing requests will be written to console');
-            this.transport = echoTransport;
+            this.transport = consoleTransport;
         }
         if (options.ip_policy) {
             this.ipPolicy = options.ip_policy;
@@ -1099,9 +1109,9 @@ var EventlakeClientImpl = /** @class */ (function () {
             setRootLogLevel(options.log_level);
         }
         this.initialOptions = options;
-        getLogger().debug("Initializing EventLake tracker", options, EVENTLAKE_VERSION);
+        getLogger().debug("Initializing EventLake", options, EVENTLAKE_VERSION);
         if (!options.key) {
-            getLogger().error("Can't initialize EventLake, key property is not set");
+            getLogger().error("Failed to initialize EventLake. API key is not passed.");
             return;
         }
         this.cookieDomain = options.cookie_domain || getCookieDomain();
@@ -1132,7 +1142,7 @@ var EventlakeClientImpl = /** @class */ (function () {
                 this.permanentProperties.globalProps = (_a = restored.globalProps) !== null && _a !== void 0 ? _a : {};
                 this.permanentProperties.propsPerEvent = (_b = restored.propsPerEvent) !== null && _b !== void 0 ? _b : {};
             }
-            getLogger().debug("Restored persistent properties", this.permanentProperties);
+            getLogger().debug("Properties loaded from cookies", this.permanentProperties);
         }
         if (options.capture_3rd_party_cookies === false) {
             this._3pCookies = {};
@@ -1174,7 +1184,7 @@ var EventlakeClientImpl = /** @class */ (function () {
             var _a;
             try {
                 var payload = __assign({}, chain.payload);
-                getLogger().debug("Intercepted segment payload", payload.obj);
+                getLogger().debug("Segment payload intercepted", payload.obj);
                 var integration = chain.integrations["Segment.io"];
                 if (integration && integration.analytics) {
                     var analyticsOriginal = integration.analytics;
@@ -1194,20 +1204,20 @@ var EventlakeClientImpl = /** @class */ (function () {
                 _this._send3p("ajs", payload, type);
             }
             catch (e) {
-                getLogger().warn("Failed to send an event", e);
+                getLogger().warn("Event sending failed", e);
             }
             chain.next(chain.payload);
         };
         if (typeof analytics.addSourceMiddleware === "function") {
             //analytics is fully initialized
-            getLogger().debug("Analytics.js is initialized, calling addSourceMiddleware");
+            getLogger().debug("analytics.js is initialized");
+            getLogger().debug("Calling addSourceMiddleware of analytics");
             analytics.addSourceMiddleware(interceptor);
         }
         else {
-            getLogger().debug("Analytics.js is not initialized, pushing addSourceMiddleware to callstack");
+            getLogger().debug("analytics.js initialization failed");
             analytics.push(["addSourceMiddleware", interceptor]);
         }
-        analytics["__en_intercepted"] = true;
     };
     EventlakeClientImpl.prototype.restoreId = function () {
         if (this.userIdPersistence) {
@@ -1249,4 +1259,4 @@ var EventlakeClientImpl = /** @class */ (function () {
     return EventlakeClientImpl;
 }());
 
-export { CookiePersistence, EVENTLAKE_API_HOST, EVENTLAKE_VERSION, NoPersistence, beaconTransport, echoTransport, envs, eventlakeClient, fetchApi, fetchTransport, httpApi, interceptSegmentCalls, xmlHttpTransport };
+export { CookiePersistence, EVENTLAKE_API_HOST, EVENTLAKE_VERSION, NoPersistence, envs, eventlakeClient, fetchApi, fetchTransport, httpApi, interceptSegmentCalls, xmlHttpTransport };

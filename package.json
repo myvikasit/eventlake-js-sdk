@@ -1,8 +1,7 @@
 {
-  "name": "eventlake",
+  "name": "eventlake-js-sdk",
   "description": "EventLake JavaScript SDK (http://eventlake.io/docs/js-sdk)",
   "scripts": {
-    "build": "yarn lerna run --stream --concurrency 1 --sort build",
     "publish": "yarn lerna run build && yarn lerna publish",
     "lerna": "lerna"
   },
@@ -15,7 +14,7 @@
   "workspaces": [
     "packages/*"
   ],
-  "version": "1.0.3",
+  "version": "1.0.0",
   "repository": "git@github.com:myvikasit/eventlake-js-sdk.git",
   "author": "EventLake Developer <dev@eventlake.io>"
 }
